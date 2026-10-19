@@ -3,3 +3,4 @@
 fieldset{padding:0;margin:0;border:0;min-width:0}fieldset:disabled{opacity:.5}.triage{border-top:4px solid #ac6256;margin-top:20px}.triage .sectiontitle>span{background:#faece8;color:#a54232}.urgent{background:#ffe5df;color:#8c2e20;border-color:#be5542}button:disabled{cursor:not-allowed;opacity:.5}
 
 @media print{.triage{display:none!important}}
+.metric small{display:block;font-size:11px;color:var(--muted)}
