@@ -3,7 +3,7 @@ const ranges={age:[18,120],spo2:[1,100],rr:[1,80],sbp:[20,300],ph:[6.5,7.8],co2:
 const names={age:'年齡',spo2:'SpO₂',rr:'呼吸頻率',sbp:'收縮壓',ph:'pH',co2:'PaCO₂',o2:'PaO₂',fio2:'FiO₂',hco3:'HCO₃⁻'};
 function evaluate(d){
  const notes=[],missing=[],errors=[];for(const [k,[a,b]] of Object.entries(ranges))if(d[k]!=null&&(!Number.isFinite(d[k])||d[k]<a||d[k]>b))errors.push(`${names[k]} 須介於 ${a}–${b}`);
- const target=d.risk==='yes'||d.co2>45?[88,92]:[94,98];const r={code:'pending',title:'完成評估後顯示建議',tone:'neutral',notes,missing,errors,target,pf:null,rox:null};
+ const co2Normal=d.co2!=null&&d.co2<=45,target=d.co2>45||(d.risk==='yes'&&!co2Normal)?[88,92]:[94,98];const r={code:'pending',title:'完成評估後顯示建議',tone:'neutral',notes,missing,errors,target,pf:null,rox:null};
  
  const fio2=d.fio2!=null?d.fio2:(d.device==='air'?21:null);r.fio2=fio2;
  if(!errors.length&&fio2&&(d.precise==='yes'||(d.device==='air'&&d.precise!=='no'))){if(d.o2)r.pf=d.o2/(fio2/100);if(d.device==='hfnc'&&d.spo2&&d.rr)r.rox=d.spo2/(fio2/100)/d.rr;}
@@ -11,6 +11,7 @@ function evaluate(d){
  if(errors.length){r.title='請修正數值或單位';return r;}
  for(const k of ['age','spo2','rr','sbp','danger','risk','cause','work','device','contra','monitor','goal'])if(d[k]==null||d[k]===''||d[k]==='unknown')missing.push(k);
  if(missing.length){r.title='資料不足，暫不選定模式';notes.push('請完成必要臨床評估；未知不視為正常。補資料期間仍須處理低血氧。');return r;}
+ if(d.risk==='yes'&&co2Normal)notes.push('有高碳酸風險但 PaCO₂ 未升高：目標調回 94–98%，30–60 分鐘複查血氣。除非曾因高碳酸衰竭用過 NIV 或插管，或平日 SpO₂ 就低於 94%，這些病人維持 88–92%。[4]');
  if(d.goal==='dni')notes.push('已選不插管：確認 NIV／HFNC 是否符合治療目標，設定限時試用及舒適照護計畫。');
  const distress=d.work!=='mild'||d.rr>24,hypox=d.spo2<target[0],acid=d.ph!=null&&d.ph<=7.35&&d.co2>45;
  if(d.ph!=null&&d.ph<7.35&&(d.co2==null||d.co2<=45))notes.push('酸血症不能直接判為呼吸性酸中毒；評估代謝性或混合性酸中毒及代償。');
@@ -24,7 +25,7 @@ function evaluate(d){
  else if(['hfnc','niv'].includes(d.device)){r.code='review';r.title='已接受進階支持：進入治療後複評';notes.push('不能因血氧達標直接降階。比較支持強度、作功與血氣趨勢。');}
  else if(d.cause==='pneumonia'&&(distress||hypox)&&d.device!=='air'){r.code='hfnc';r.title='評估啟動 HFNC';r.tone='teal';notes.push('肺炎／新發低血氧性呼吸衰竭，一般氧療不足或呼吸負擔增加時，考慮 HFNC。[2,3]','ATS 2026：HFNC 相較一般氧療為強烈推薦，NIV／CPAP 相較一般氧療為有條件推薦；不表示 HFNC 對每位病人優於 NIV。');}
  else if(distress){r.code='special';r.title='呼吸負擔增加：進一步評估';r.tone='amber';notes.push('血氧達標不代表通氣安全；檢查血氣、病因與疲乏。');}
- else {r.code='oxygen';r.title=hypox?'給予／調整一般氧療':'維持目標，評估最低必要氧療';r.tone='teal';notes.push(d.risk==='yes'?'以 Venturi 或低流量鼻導管控制氧濃度，依血氣調整。[4]':'以鼻導管或面罩滴定至目標；無低血氧及特殊適應症者不需常規給氧。[4]');}
+ else {r.code='oxygen';r.title=hypox?'給予／調整一般氧療':'維持目標，評估最低必要氧療';r.tone='teal';notes.push(d.risk==='yes'&&target[0]===88?'以 Venturi 或低流量鼻導管控制氧濃度，依血氣調整。[4]':'以鼻導管或面罩滴定至目標；無低血氧及特殊適應症者不需常規給氧。[4]');}
  if(noGas&&['hfnc','cpap'].includes(r.code))notes.push('尚無動脈血氣：支持不應延後，但請盡快抽血氣；若 pH ≤7.35 且 PaCO₂ >45 mmHg，改評估雙水平 NIV。');
  if(d.contra==='yes'){if(['niv','cpap'].includes(r.code)){const ind=r.code==='niv'?'雙水平 NIV':'CPAP／NIV';r.code='contra';r.title='有'+ind+'適應，但面罩有限制：專家評估替代方案';r.tone='amber';notes.splice(pre);notes.push('處理嘔吐／吸入風險、無法清痰、面部損傷、未處理氣胸或介面不耐受。氣道保護失敗應改走急救評估。','HFNC 不可自動替代必要通氣支持；合併酸中毒或疲乏應同步評估插管。');}else if(['hfnc','review'].includes(r.code))notes.push('面罩 NIV 有禁忌／限制：若日後需要升級通氣支持，應直接評估插管，而非勉強使用面罩；確認可清痰與保護氣道。');}
  if(d.spo2<85){r.tone='amber';notes.push('SpO₂ <85%：立即床邊評估與高濃度氧急救橋接；不能等待完成此工具。');}
